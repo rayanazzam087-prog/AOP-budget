@@ -80,7 +80,7 @@ best agent is free (it is an MLP, not an LLM call), so every condition except `m
 7. **Reward-model training data.** The public HuskyQA release has only the 292-question test
    set, so the reward model is trained on a 1,440-question mix of HotpotQA, GSM8K, Bamboogle
    and StrategyQA (`data/rm_train/`, details in its README) instead of HuskyQA's training split.
-8. **Scorer and thresholds.** With GPT-4o-mini, the paper-style scorer gave 86% of answers
+8. **Scorer and thresholds.** With GPT-4o-mini, the paper-style scorer gave 85% of answers
    5/5, so the reward model had nothing to learn. A stricter scorer that takes the agent's
    tools into account is used instead (`prompts.SCORER_SYSTEM`; the lenient version is kept
    for reference). The thresholds are set by quantiles on held-out sub-tasks, and the MLP
@@ -95,14 +95,14 @@ git clone <your repo> && cd aop-budget
 python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env        # then edit .env (step 1)
-python -m pytest -q         # 11 tests, offline, should all pass
+python -m pytest -q         # 14 tests, offline, should all pass
 ```
 
 ### 1. Get an LLM API key and put it in `.env`
 
 Any one of these works:
 
-- **OpenAI** (closest to the paper): GPT-4o-mini.
+- **OpenAI** (closest to the paper): GPT-4o (main) or GPT-4o-mini (cheaper).
   `LLM_PROVIDER=openai`, `LLM_MODEL=gpt-4o-mini`, `LLM_API_KEY=sk-...`
 - **Free options** through OpenAI-compatible endpoints. These have tight rate limits, so
   use `--workers 2`.
