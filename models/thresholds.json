@@ -1,0 +1,8 @@
+{
+ "tau_high": 4.3043,
+ "tau_low": 3.7961,
+ "tau_sim": 0.5033,
+ "flag_rate": 0.3,
+ "replan_rate": 0.05,
+ "n_heldout_subtasks": 105
+}

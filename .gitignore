@@ -1,0 +1,13 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.cache/
+data/*
+!data/sample/
+!data/rm_train/
+data/rm/
+# results/, results_gpt4o/ and models/ ARE committed: they are the evidence for the paper
+# leftover duplicate folder from an early unzip
+aop-budget/
