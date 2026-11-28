@@ -1,0 +1,42 @@
+{
+  "base_url": null,
+  "code_sha256": {
+    "aop\\__init__.py": "0a3d468196235ade5cf22913b03d118e086b0925f64e068dc6bb7aa938c1bd26",
+    "aop\\agents.py": "ea2aa2092fcc557cdf6fa273c65208360c7d3d6c768bb5a2acc4e8beb9cc14fc",
+    "aop\\data.py": "1f0b9d436aaeed371ce53f469759e6fa87f376eccea1fb82ef0bdb2652eea364",
+    "aop\\evaluate.py": "292ede1b59cb0c55beb3b7928f3ab9c31f984be4727cdabe6747fd5534801cbf",
+    "aop\\ledger.py": "625c96d6a0144f7e729a261e116cd61f5704c8cbe19f1f10652064e91a53c964",
+    "aop\\llm.py": "453e8169bcbfa0c5fc9a6bc200d08b85c0d79229537f2fc34fa926ad44d176b2",
+    "aop\\mock_llm.py": "71df949ab4dda35935960801b52dbce70f2f8c43c41b8793f83fa412ec9fd42d",
+    "aop\\pipeline.py": "7d2f3bbbfef0447f5134cdd6a09048f97c5d1d37cee90f617ae7c62e994841d5",
+    "aop\\plan.py": "f80cb8d56a452e77eee1207267273deb44c8bde6328c92fe57289e7a83301d94",
+    "aop\\prompts.py": "40ce53f3304290c34837a64d75b891cb35ffaef3e4d6b17850b6643f08474ac8",
+    "aop\\reward_model.py": "e13bdf736394ca863f6e7c5897c8e52dbe03799d21c302063c0c2245d9349d00",
+    "aop\\search.py": "73d3ff265991356546d7d24e25eef8aeaf7ca39b1ea72eb89343f1b860745678",
+    "aop\\system.py": "be7fd28903c1439a8e60459e991c7de9cb02530c204df0a8f14c7e888627f01b",
+    "scripts\\run_experiment.py": "979ff557ae039fc2d96b3d58296c3a4123def4564b9edfc527f8f364b6e7fcc2"
+  },
+  "config": {
+    "budget": 2,
+    "max_detector_rounds": 2,
+    "max_subtasks": 8,
+    "policy": "random",
+    "reassign_margin": 0.5,
+    "seed": 0,
+    "tau_high": 4.3043,
+    "tau_low": 3.7961,
+    "tau_sim": 0.5033
+  },
+  "data_sha256": "d6926b8e251af2daf18f4422a350d4aea3a62301a231d540f6d6e3faf5cef4b0",
+  "judge_model": "gpt-4o-mini",
+  "judge_provider": "openai",
+  "max_tokens": 1024,
+  "model": "gpt-4o",
+  "provider": "openai",
+  "representative_works_sha256": "b783f6413f0b329377c58e0cc1b9499bb06ca826afd8493f985fff2c68788777",
+  "reward_model_sha256": "90632bb981f20568951872bb535823f2ae53bd67987057807fb45d1d14d8fbd1",
+  "schema": 1,
+  "search_backend": "wikipedia",
+  "seed": null,
+  "temperature": 0.0
+}

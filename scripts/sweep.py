@@ -29,7 +29,7 @@ def main():
     system = build(args, need_rm=True)
     if system[3] is None:
         sys.exit("No reward model found. Run collect_rm_data.py and train_reward_model.py first.")
-    conds = [] if args.skip_baselines else [("meta", 0), ("full", 0)]
+    conds = [] if args.skip_baselines else [("meta", 0), ("routing", 0), ("full", 0)]
     conds += [(p, int(b)) for b in args.budgets.split(",") for p in args.policies.split(",")]
     for policy, budget in conds:
         run_condition(args, policy, budget, system)

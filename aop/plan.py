@@ -28,7 +28,13 @@ def normalize(subtasks: list[dict], agents: list[str], max_subtasks: int = 8) ->
         except (TypeError, ValueError):
             sid = i + 1
         deps = []
-        for d in s.get("depends_on") or []:
+        raw_deps = s.get("depends_on")
+        # Some otherwise valid model replies use 1 or "1" instead of [1].
+        if isinstance(raw_deps, (str, int)):
+            raw_deps = [raw_deps]
+        elif not isinstance(raw_deps, (list, tuple)):
+            raw_deps = []
+        for d in raw_deps:
             try:
                 deps.append(int(d))
             except (TypeError, ValueError):

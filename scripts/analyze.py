@@ -65,7 +65,7 @@ def mcnemar_p(a: list[bool], b: list[bool]) -> tuple[int, int, float]:
 
 def sort_key(name: str):
     m = re.match(r"([a-z]+)(?:_B(\d+))?", name)
-    order = {"meta": 0, "full": 1, "check": 2, "revise": 3, "split": 4, "random": 5}
+    order = {"meta": 0, "routing": 1, "full": 2, "check": 3, "revise": 4, "split": 5, "random": 6}
     return (int(m.group(2) or 0), order.get(m.group(1), 9), name)
 
 

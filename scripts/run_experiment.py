@@ -7,12 +7,14 @@ Results go to results/<dataset>_<split>/<condition>.jsonl (one line per query, w
 answer, correctness, plan trace and the cost ledger). Re-running resumes where it stopped.
 """
 import argparse
+import hashlib
 import json
 import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from dataclasses import asdict
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -39,6 +41,24 @@ def add_run_args(ap):
     ap.add_argument("--tag", default="", help="suffix for the output file (e.g. model name)")
 
 
+def file_hash(path):
+    p = Path(path)
+    return hashlib.sha256(p.read_bytes()).hexdigest() if p.is_file() else None
+
+
+def ensure_manifest(out, manifest):
+    """Refuse to mix old results, changed code, or changed configurations on resume."""
+    target = out.with_suffix(".manifest.json")
+    if target.exists():
+        previous = json.loads(target.read_text(encoding="utf-8"))
+        if previous != manifest:
+            raise ValueError(f"Run provenance changed for {out}; use a new --results-dir.")
+    elif out.exists() and out.stat().st_size:
+        raise ValueError(f"Legacy results have no provenance manifest: {out}; use a new --results-dir.")
+    else:
+        target.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
+
+
 def run_condition(args, policy: str, budget: int, system=None) -> Path:
     llm, judge_llm, agents, rm, rw = system or build(args, need_rm=policy != "meta")
     thr = {"tau_high": 3.5, "tau_low": 1.5, "tau_sim": 0.6}
@@ -54,6 +74,23 @@ def run_condition(args, policy: str, budget: int, system=None) -> Path:
     out_dir = Path(args.results_dir) / f"{args.dataset}_{args.split}"
     out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / f"{cfg.name()}{('_' + args.tag) if args.tag else ''}.jsonl"
+    repo = Path(__file__).resolve().parents[1]
+    manifest = {
+        "schema": 1, "config": asdict(cfg),
+        "code_sha256": {str(p.relative_to(repo)): file_hash(p)
+                        for p in sorted(list((repo / "aop").glob("*.py"))
+                                        + [Path(__file__).resolve()])},
+        "data_sha256": hashlib.sha256(json.dumps(rows, sort_keys=True).encode()).hexdigest(),
+        "model": llm.cfg.model, "provider": llm.cfg.provider,
+        "base_url": llm.cfg.base_url, "temperature": llm.cfg.temperature,
+        "max_tokens": llm.cfg.max_tokens, "seed": llm.cfg.seed,
+        "judge_model": None if args.no_judge else judge_llm.cfg.model,
+        "judge_provider": None if args.no_judge else judge_llm.cfg.provider,
+        "search_backend": agents["search_agent"].search.backend,
+        "reward_model_sha256": file_hash(args.reward_model) if policy != "meta" else None,
+        "representative_works_sha256": file_hash(args.rep_works) if policy != "meta" else None,
+    }
+    ensure_manifest(out, manifest)
     done = set()
     if out.exists():
         done = {json.loads(x)["id"] for x in out.read_text(encoding="utf-8").splitlines() if x.strip()}
@@ -75,6 +112,7 @@ def run_condition(args, policy: str, budget: int, system=None) -> Path:
         rec = {"id": row["id"], "condition": cfg.name(), "policy": policy, "budget": budget, "thresholds": thr,
                "question": row["question"], "gold": row["answer"], "pred": pred, **g,
                "cost": ledger.summary(), "wall_s": round(wall, 2), "error": err}
+        rec["provenance_sha256"] = hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()
         if res:
             rec["trace"] = result_to_dict(res)
         return rec

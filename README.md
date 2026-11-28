@@ -1,217 +1,143 @@
-# AOP-Budget: plan checking vs. sub-task revision under a coordination budget
+# AOP-Budget: checking versus revision under a coordination-call allowance
 
-COE549 Advanced LLM final project, Rayan Azzam.
+COE549 Advanced LLM final project - Rayan Azzam.
 
-This is a reimplementation of **Agent-Oriented Planning (AOP)** (Li et al., ICLR 2025,
-arXiv:2410.02189), extended with a **coordination-budget controller**.
+Independent reimplementation of Agent-Oriented Planning (AOP), extended
+with a coordination-budget controller and per-stage cost accounting.
 
-**Research question.** Suppose each query gets a fixed budget of *B* extra coordination
-LLM calls. Is it better to spend them on **plan checking** (the detector) or on **sub-task
-revision** (replan, re-describe, plan-in-detail)?
+## Corrected evaluation
 
-## Results at a glance
+The corrected grid contains 27 configurations: 12 GPT-4o and 15 GPT-4o-mini.
+Every configuration uses the same 292 HuskyQA test questions, giving
+7,884 question-condition outcomes.
 
-![Accuracy vs. budget](figures/accuracy_vs_budget.png)
+| Model | Meta | Routing only | Full implementation | Full token overhead vs meta |
+|---|---|---|---|---|
+| GPT-4o | 43.5% | 44.2% | 43.5% | +52.3% |
+| GPT-4o-mini | 34.9% | 33.9% | 34.9% | +48.5% |
 
-| HuskyQA test (292 q.) | GPT-4o | GPT-4o-mini |
-|---|---|---|
-| AOP paper, reported (GPT-4o) | 43.7% | – |
-| **Full AOP (this reimplementation)** | **43.5%** | 34.9% |
-| **No coordination (`meta`)** | **43.5%** | 34.9% |
-| Best budgeted condition | 44.5% (random, B=1) | 35.3% (split/random, B=2) |
-| Extra tokens, full AOP vs. `meta` | +50% | +48% |
+No statistically significant accuracy difference was detected between plan checking and subtask revision in the six direct paired comparisons. Checking consumed more tokens in every comparison. No coordinated condition significantly outperformed routing alone under the reported exact McNemar tests. Non-significance does not establish equivalence.
 
-- The reimplementation reproduces AOP's reported accuracy, but a plain decomposition
-  baseline reaches the same accuracy without any coordination.
-- Under every budget (B = 1, 2, 4), neither plan checking nor sub-task revision improves
-  accuracy on either model (all differences n.s., p ≥ 0.55). Coordination changes up to
-  63% of plans but fixes as many answers as it breaks, at up to +50% tokens.
+See [RESULTS.md](RESULTS.md) for corrected tables and qualifications.
 
-Full tables, statistics and findings: **[RESULTS.md](RESULTS.md)**.
+![Corrected GPT-4o results](figures/corrected_gpt4o.png)
 
-## How the code maps to the paper
+![Corrected GPT-4o-mini results](figures/corrected_mini.png)
 
-| Paper (AOP) | Code |
-|---|---|
-| Meta-agent: fast decomposition and allocation (§4.1) | `aop/pipeline.py` `AOP.decompose` |
-| Reward model M_θ(q, d) = MLP([E(q); E(d)]), MSE training (§4.2, Eq. 2–4) | `aop/reward_model.py`, `scripts/collect_rm_data.py`, `scripts/train_reward_model.py` |
-| Representative works and similarity (§4.3, Eq. 5) | `aop/reward_model.py` `RepresentativeWorks` |
-| Re-describe / plan-in-detail / replan (§4.3) | `AOP.revise` |
-| Detector: completeness and non-redundancy (§4.4) | `AOP.check` |
-| Code, math, search and commonsense agents | `aop/agents.py`, `aop/search.py` |
-| GPT-4o answer judge | `aop/evaluate.py` |
-| **New: budget controller** (meta, full, check, revise, split, random) | `AOP.coordinate` |
-| **New: per-stage cost ledger** (calls, tokens, latency) | `aop/ledger.py` |
+## Conditions
 
-### Budget accounting
+- `meta`: decomposition, execution, aggregation; no reward-model routing.
+- `routing`: reward-model routing without checking or revision.
+- `full`: detector and revision procedure without the experimental B
+  allowance. Other implementation limits still apply.
+- `check`, `revise`, `split`, `random`: coordination allocation policies
+  at B = 1, 2, 4.
 
-The budget *B* applies only to **coordination** calls:
+GPT-4o does not include split conditions. This omission followed inspection
+of mini results and is an exploratory design decision.
 
-- **Check**: one detector call. It may rewrite the plan.
-- **Revise**: one call that fixes the riskiest flagged sub-task.
+## Relationship to AOP
 
-The following are fixed costs and are not counted against *B*: decomposition (1 call),
-agent execution, and aggregation (1 call). Re-assigning a sub-task to the reward model's
-best agent is free (it is an MLP, not an LLM call), so every condition except `meta` gets it.
+This is an independent reimplementation, not an exact reproduction.
+Differences include:
 
-| Condition | Meaning |
-|---|---|
-| `meta` | Meta-Agent baseline: decompose, execute, aggregate. No reward model, no checks. |
-| `full` | AOP as published: detector rounds, then every flagged sub-task is revised. No cap. |
-| `check_B{1,2,4}` | All *B* calls go to the detector. |
-| `revise_B{1,2,4}` | All *B* calls go to revision, lowest reward-model score first. |
-| `split_B{1,2,4}` | Alternates check, revise, check, … |
-| `random_B{1,2,4}` | Picks check or revise at random. A control for "any extra call helps". |
+- Wikipedia search instead of Bing.
+- Substitute reward-model training data.
+- Independently written prompts.
+- GPT-4o-mini scoring and answer judging.
+- Thresholds calibrated on a different scoring scale.
+- Frozen representative works during testing.
+- No recursive revision of newly created subtasks.
+- A reward model trained with mini agents and reused for GPT-4o.
 
-### Deviations from the paper (state these in the report)
+Original paper:
+[Agent-Oriented Planning in Multi-Agent Systems](https://arxiv.org/abs/2410.02189).
 
-1. **Backbone.** The main results use GPT-4o, as in the paper; GPT-4o-mini is the second
-   model. The answer judge and the reward-model scorer are GPT-4o-mini in both runs. The
-   reward model was trained with GPT-4o-mini agents and reused for GPT-4o.
-2. **Search.** The Bing Search API was retired in Aug 2025. Search uses Wikipedia (free)
-   by default, or Tavily or Serper. All results are cached.
-3. **Thresholds.** The paper does not report τ. Tune `--tau-high`, `--tau-low` and
-   `--tau-sim` on the train split (see step 4 below).
-4. **Prompts.** Written from the paper's descriptions, not copied from its appendix.
-5. **Feedback loop.** Representative works are frozen during test runs, so conditions are
-   compared on equal terms. In the paper they keep growing during the run.
-6. **Revision.** Sub-tasks created by a revision are re-routed to an agent but not revised
-   again. This keeps cost bounded.
-7. **Reward-model training data.** The public HuskyQA release has only the 292-question test
-   set, so the reward model is trained on a 1,440-question mix of HotpotQA, GSM8K, Bamboogle
-   and StrategyQA (`data/rm_train/`, details in its README) instead of HuskyQA's training split.
-8. **Scorer and thresholds.** With GPT-4o-mini, the paper-style scorer gave 85% of answers
-   5/5, so the reward model had nothing to learn. A stricter scorer that takes the agent's
-   tools into account is used instead (`prompts.SCORER_SYSTEM`; the lenient version is kept
-   for reference). The thresholds are set by quantiles on held-out sub-tasks, and the MLP
-   uses early stopping and weight decay.
+## Corrected and historical outputs
 
-## What you need to do
+Use `results_corrected_gpt4o`, `results_corrected_mini`, and
+`analysis_corrected`.
 
-### 0. Setup (about 10 min)
+The older `results` and `results_gpt4o` folders and their figures are
+historical outputs. Do not mix historical and corrected results.
 
-```bash
-git clone <your repo> && cd aop-budget
-python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-cp .env.example .env        # then edit .env (step 1)
-python -m pytest -q         # 14 tests, offline, should all pass
-```
+Corrections accept detector changes to assignments and dependencies,
+normalize scalar dependency fields, prevent extra JSON repair calls during
+coordination, and add routing-only controls.
 
-### 1. Get an LLM API key and put it in `.env`
+Authentication-failure rows were backed up and retried without selecting
+outcomes by correctness.
 
-Any one of these works:
+## Setup
 
-- **OpenAI** (closest to the paper): GPT-4o (main) or GPT-4o-mini (cheaper).
-  `LLM_PROVIDER=openai`, `LLM_MODEL=gpt-4o-mini`, `LLM_API_KEY=sk-...`
-- **Free options** through OpenAI-compatible endpoints. These have tight rate limits, so
-  use `--workers 2`.
-  - Google Gemini: `LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/`
-  - Groq: `LLM_BASE_URL=https://api.groq.com/openai/v1`
+Use Python 3.12 and install dependencies:
 
-  Check each provider's current model names.
+    python -m pip install -r requirements.txt
+    python -m pytest -q
 
-Until you have a key, everything runs with `LLM_PROVIDER=mock`. The mock's numbers are
-meaningless; it only checks that the code works.
+Provide the original 292-question `data/huskyqa/test.jsonl`, the saved model
+and thresholds in `models`, and local API configuration in `.env`.
+Never commit credentials or caches.
 
-### 2. Get the data
+## Reproduce evaluation
 
-```bash
-pip install huggingface_hub pandas pyarrow
-python scripts/download_data.py          # -> data/huskyqa/test.jsonl (292 questions)
-```
+These commands can incur API charges. Identical cached calls are reused
+when the original caches are available. Corrected reruns are not
+independent replications.
 
-If that fails, download HuskyQA by hand from <https://huggingface.co/agent-husky> and run
-`python scripts/download_data.py --from-file <file> huskyqa test`.
-Only the 292-question test set is public; the reward-model training pool ships in `data/rm_train/`.
+    python scripts/sweep.py --provider openai --model gpt-4o-mini --judge-model gpt-4o-mini --search wikipedia --embedder minilm --workers 2 --results-dir results_corrected_mini
 
-### 3. Smoke test with a real model (a few cents)
+    python scripts/sweep.py --provider openai --model gpt-4o --judge-model gpt-4o-mini --search wikipedia --embedder minilm --policies check,revise,random --workers 2 --results-dir results_corrected_gpt4o
 
-First check that search works from your machine: `python scripts/check_search.py`.
+Saved rows resume automatically. Provenance manifests guard against
+mixing incompatible code or configurations.
+
+## Offline analysis
+
+These commands make no paid API calls:
+
+    python scripts/analyze.py --run huskyqa_test --results-dir results_corrected_mini
+
+    python scripts/analyze.py --run huskyqa_test --results-dir results_corrected_gpt4o
+
+    python scripts/compare_policies.py --mini-dir results_corrected_mini/huskyqa_test --gpt4o-dir results_corrected_gpt4o/huskyqa_test --out analysis_corrected
+
+## Scope limits
+
+Development included inspection of test traces. Model aliases rather than
+exact model snapshots were recorded. Shared cached generations do not
+provide independent replications. Findings concern this benchmark,
+implementation, and model pair.
+
+Analysis followed observation of outcomes; no preregistration is claimed.
+
+The code agent executes generated Python in a subprocess.
+It is not a security sandbox.
 
 
-```bash
-python scripts/run_experiment.py --dataset sample --policy meta --workers 2
-```
+## Interpretation and accounting
 
-Then open `results/sample_test/meta.jsonl` and read a few traces: the plan, each agent's
-answer, and the final answer. **Fix prompts now if something looks wrong.**
-
-### 4. Reward model
-
-```bash
-python scripts/collect_rm_data.py --limit 300 --workers 4   # agents answer + scorer grades (~$0.30)
-python scripts/rescore_rm_data.py                            # only if data was graded with the old lenient scorer
-python scripts/train_reward_model.py --data data/rm/rm_data_strict.jsonl
-```
-
-The training script uses early stopping and weight decay, so it does not over-fit. It
-**calibrates the thresholds** on held-out sub-tasks: by default about 30% are flagged for
-revision and 5% are replanned, and τ_sim is set so that half of the revisions are
-re-describe and half are plan-in-detail. It saves these to `models/thresholds.json`, which
-every experiment then uses. Check two lines in its output:
-
-- **"flagged ... should be LOWER"**: flagged sub-tasks should really be the weaker ones.
-- **"RM picks the better agent"**: should be above 50% (chance).
-
-### 5. Pilot sweep, then the full sweep
-
-To reproduce the paper results exactly:
-
-```bash
-python scripts/sweep.py --workers 4                                   # GPT-4o-mini, 14 conditions
-python scripts/sweep.py --model gpt-4o --judge-model gpt-4o-mini \
-    --policies check,revise,random --results-dir results_gpt4o --workers 4   # GPT-4o, 11 conditions
-python scripts/analyze.py --run huskyqa_test
-python scripts/analyze.py --run huskyqa_test --results-dir results_gpt4o
-python scripts/make_figures.py
-```
-
-Pilot first, if you are starting from scratch:
-
-```bash
-python scripts/sweep.py --limit 50 --workers 8     # pilot on 50 test queries
-python scripts/analyze.py --run huskyqa_test       # table + plot
-python scripts/sweep.py --workers 8                # all 292 (resumes and reuses the cache)
-python scripts/analyze.py --run huskyqa_test
-```
-
-This writes `results/huskyqa_test/summary.md` (accuracy with 95% CI, McNemar tests vs.
-`meta` and `full`, calls, tokens, latency, and process statistics) and
-`accuracy_vs_budget.png`. These go straight into the slides and the paper.
-
-### Optional extras for the final paper
-
-- **H2 (weaker executor):** run the sweep again with a smaller model:
-  `--model <small model> --tag small`.
-- **Transfer:** run on DROP or IIRC. Use `download_data.py --all`, then
-  `--dataset drop --limit 200`.
-- **Variance:** repeat with `--seed 1` and `--seed 2`. The seed salts the cache, so each
-  run makes fresh calls.
-
-## Cost and time
-
-The complete project (reward-model data, both models, all conditions, pilots) cost about
-**$8** in OpenAI API fees. The LLM cache (`.cache/llm.sqlite`) means a re-run of an
-existing experiment costs nothing. A full 292-question sweep takes about 30–60 min with
-`--workers 4`, mostly limited by the Wikipedia rate limit.
-
-## Safety note
-
-The code agent executes Python written by the model, using `python -I` in a temp directory
-with a timeout. That is **not** a security sandbox. Run the project in a VM or container if
-that worries you.
-
-## Layout
-
-```
-aop/            library: llm, ledger, agents, search, plan, reward_model, pipeline, evaluate
-scripts/        download_data, check_search, collect_rm_data, rescore_rm_data, train_reward_model,
-                run_experiment, sweep, analyze, show_traces, make_figures
-tests/          offline unit tests (mock LLM)
-results/        GPT-4o-mini results (one JSONL per condition)
-results_gpt4o/  GPT-4o results
-models/         trained reward model, representative works, thresholds
-figures/        figure used in README / paper / slides
-data/sample/    12 hand-written smoke-test questions (not a benchmark)
-```
+- B is a maximum allowance of coordination calls. It does not match
+  realized calls, tokens, dollars, or wall-clock time. Policies can stop early.
+- Token totals include pipeline prompt and completion tokens, including
+  cached calls at their original token counts.
+- Evaluation calls and reward-model CPU overhead are excluded.
+- Reward-model routing uses CPU computation but no LLM API call.
+- Changed plans can change execution costs.
+- Summed historical LLM latency excludes search time and is not measured
+  end-to-end runtime.
+- Direct tests use Holm correction across six comparisons.
+- Exploratory routing comparisons use a separate Holm correction across
+  23 comparisons.
+- Bootstrap intervals are pointwise percentile intervals, not simultaneous
+  intervals. With few discordant outcomes, they can disagree with exact
+  tests. Significance claims follow the reported exact tests.
+- Numerical proximity does not diagnose factual drift or an error's cause.
+  The secondary numeric metric counts recorded correctness OR first-number
+  proximity within 5%.
+- Task-text plan-change counts exclude changes solely to assignments
+  or dependencies.
+- Detector edit percentages are per detector call, not per question.
+- Recorded-output checks do not establish that every internal agent/tool
+  action succeeded or that every judge label is correct.
+- Trace-level review remains separate.

@@ -4,11 +4,12 @@ Fixed costs (not budgeted): decompose (1 call), agent execution, aggregate (1 ca
 Coordination calls (budgeted by B):
   * CHECK  - one detector call: checks completeness / redundancy and may rewrite the plan.
   * REVISE - one call that fixes one flagged sub-task: replan | re-describe | plan-in-detail.
-The reward model's re-assignment to the best-scoring agent is free (an MLP, no LLM call)
+The reward model's re-assignment uses CPU computation but no LLM call
 and is applied in every condition except the plain Meta-Agent baseline.
 
 Policies
   meta    - Meta-Agent baseline: decompose -> execute -> aggregate. No RM, no checks.
+  routing - Same RM routing as coordinated policies, with no checking or revision.
   full    - AOP as in the paper: detector rounds, then revise every flagged sub-task. No cap.
   check   - Check-only(B): spend the budget on detector calls only.
   revise  - Revise-only(B): spend it on revisions only, riskiest (lowest score) sub-task first.
@@ -29,7 +30,7 @@ from .llm import LLM
 from .plan import normalize, splice, public
 from .reward_model import RewardModel, RepresentativeWorks
 
-POLICIES = ("meta", "full", "check", "revise", "split", "random")
+POLICIES = ("meta", "routing", "full", "check", "revise", "split", "random")
 
 
 @dataclass
@@ -45,7 +46,7 @@ class AOPConfig:
     seed: int = 0
 
     def name(self) -> str:
-        return self.policy if self.policy in ("meta", "full") else f"{self.policy}_B{self.budget}"
+        return self.policy if self.policy in ("meta", "routing", "full") else f"{self.policy}_B{self.budget}"
 
 
 @dataclass
@@ -79,7 +80,8 @@ class AOP:
         events: list[dict] = []
         unused = 0
         if cfg.policy != "meta":
-            budget = 10 ** 6 if cfg.policy == "full" else cfg.budget
+            budget = (10 ** 6 if cfg.policy == "full" else
+                      0 if cfg.policy == "routing" else cfg.budget)
             worker = copy.copy(self)          # per-query state (_plan) -> thread-safe
             unused = worker.coordinate(query, plan, budget, ledger, events)
             plan = worker._plan
@@ -131,7 +133,7 @@ class AOP:
         return 0 if cfg.policy == "full" else budget - spent
 
     def route(self, events):
-        """Free RM step: score every sub-task, move it to the best agent if its score is
+        """CPU-only RM step: score every sub-task, move it to the best agent if its score is
         below tau_high AND the best agent is clearly better (reassign_margin), and flag it
         for revision if even the best agent scores < tau_high."""
         for s in self._plan:
@@ -155,20 +157,21 @@ class AOP:
         try:
             out = self.llm.chat_json([{"role": "system", "content": system},
                                       {"role": "user", "content": user}], stage="detector",
-                                     ledger=ledger, meta={"query": query, "plan": public(self._plan)})
+                                     ledger=ledger, meta={"query": query, "plan": public(self._plan)},
+                                     repair_attempts=0)
         except ValueError:
             events.append({"step": "check", "ok": None, "changed": False, "error": "bad json"})
             return False
         new = (out.get("revised_plan") or {}).get("subtasks") if isinstance(out.get("revised_plan"), dict) else None
         changed = bool(new) and not out.get("ok", False)
         if changed:
-            # keep uids/scores of sub-tasks whose text did not change
+            # Preserve identities, but normalize and re-score accepted revisions.
             old = {s["task"]: s for s in self._plan}
             new = normalize(new, list(self.agents), self.cfg.max_subtasks)
             for s in new:
                 if s["task"] in old:
                     s["uid"] = old[s["task"]]["uid"]
-            changed = [x["task"] for x in public(new)] != [x["task"] for x in public(self._plan)]
+            changed = public(new) != public(self._plan)
             if changed:
                 self._plan = new
         events.append({"step": "check", "ok": out.get("ok"), "missing": out.get("missing", []),
@@ -199,7 +202,7 @@ class AOP:
         try:
             out = self.llm.chat_json([{"role": "system", "content": system},
                                       {"role": "user", "content": user}],
-                                     stage=action, ledger=ledger, meta=meta)
+                                     stage=action, ledger=ledger, meta=meta, repair_attempts=0)
         except ValueError:
             events.append({"step": "revise", "action": action, "id": target["id"], "error": "bad json"})
             return set()

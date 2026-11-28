@@ -118,13 +118,16 @@ class LLM:
             ledger.add(CallRecord(stage, self.cfg.model, pt, ct, round(lat, 3), cached))
         return text
 
-    def chat_json(self, messages, *, stage, ledger, max_tokens=None, meta=None) -> dict:
-        """Like chat() but parses a JSON object out of the reply (one repair retry)."""
+    def chat_json(self, messages, *, stage, ledger, max_tokens=None, meta=None,
+                  repair_attempts: int = 1) -> dict:
+        """Parse a JSON object; coordination disables the extra repair call."""
         text = self.chat(messages, stage=stage, ledger=ledger, json_mode=True,
                          max_tokens=max_tokens, meta=meta)
         try:
             return parse_json(text)
         except ValueError:
+            if repair_attempts == 0:
+                raise
             repair = messages + [{"role": "assistant", "content": text},
                                  {"role": "user", "content": "That was not valid JSON. "
                                   "Reply again with ONLY the JSON object."}]
@@ -181,12 +184,17 @@ def parse_json(text: str) -> dict:
     if text.startswith("```"):
         text = re.sub(r"^```(?:json)?|```$", "", text, flags=re.M).strip()
     try:
-        return json.loads(text)
+        value = json.loads(text)
+        if not isinstance(value, dict):
+            raise ValueError("expected a JSON object")
+        return value
     except json.JSONDecodeError:
         m = _JSON_RE.search(text)
         if m:
             try:
-                return json.loads(m.group(0))
+                value = json.loads(m.group(0))
+                if isinstance(value, dict):
+                    return value
             except json.JSONDecodeError:
                 pass
     raise ValueError(f"could not parse JSON from: {text[:200]}")
